@@ -62,9 +62,8 @@ Voici les ports associés (L'ip étant toujours, à l'heure actuelle : **185.152
 - purple: 26003
 - green: 26006
 - red: 26007
-- mocha: 26016
-- tutoriel (accueil): 12333
+- accueil (serveur tutoriel): 12333
 - hub: 12555
-- island 1: 17123
-- island 2: 17124
-- island 3: 17126
+- freebuild1: 17123
+- freebuild2: 17124
+- freebuild3: 17126
