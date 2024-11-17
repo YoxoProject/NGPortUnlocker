@@ -65,7 +65,7 @@ fn listen_to_server(rx: std::sync::mpsc::Receiver<String>, auth_string: String) 
     let stream = TcpStream::connect(SERVER_ADDRESS);
     let stream = match stream {
         Ok(s) => {
-            info!("[{}] Connecté au serveur", get_date());
+            println!("[{}] Connecté au serveur", get_date());
             Some(s)
         }
         Err(e) => {
@@ -83,7 +83,7 @@ fn listen_to_server(rx: std::sync::mpsc::Receiver<String>, auth_string: String) 
             match line {
                 Ok(server_message) => {
                     if !server_message.starts_with("PING_AND_DATA") {
-                        info!("[{}] Message reçu du serveur : {}", get_date(), server_message);
+                        println!("[{}] Message reçu du serveur : {}", get_date(), server_message);
 
                         if server_message.starts_with("SUBMITNAME") {
                             writeln!(tcp_stream, "{}", auth_string).unwrap();
