@@ -1,14 +1,11 @@
 #[macro_use]
 extern crate rocket;
 
-use rocket::serde::json::Json;
 use rocket::State;
-use std::io::{self, BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::sync::mpsc::Sender;
-use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
 use config::Config;
 use serde::Deserialize;
 
@@ -70,7 +67,7 @@ async fn connect(server: &str, tx: &State<Sender<String>>) -> String {
 
 fn listen_to_server(rx: std::sync::mpsc::Receiver<String>, auth_string: String) {
     let stream = TcpStream::connect(SERVER_ADDRESS);
-    let mut stream = match stream {
+    let stream = match stream {
         Ok(s) => {
             info!("Connecté au serveur");
             Some(s)
