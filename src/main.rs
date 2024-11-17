@@ -12,6 +12,8 @@ use std::time::Duration;
 use config::Config;
 use serde::Deserialize;
 
+use log::{info, warn, error};
+
 const SERVER_ADDRESS: &str = "event.nationsglory.fr:59001";
 const REMOVE_WAITLIST: &str = "MESSAGE socket REMOVE_WAITINGLIST";
 
@@ -24,6 +26,9 @@ struct AppConfig {
 
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .init();
+
     let (tx, rx) = std::sync::mpsc::channel::<String>();
 
     let settings = Config::builder()
@@ -36,7 +41,7 @@ async fn main() -> Result<(), rocket::Error> {
     let config: AppConfig = settings.try_deserialize().unwrap();
 
     if config.auth_string.is_empty() {
-        eprintln!("Le champ auth_string est vide dans le fichier de configuration. Merci de le spécifier !");
+        error!("Le champ auth_string est vide dans le fichier de configuration. Merci de le spécifier !");
         return Ok(());
     }
 
@@ -67,11 +72,11 @@ fn listen_to_server(rx: std::sync::mpsc::Receiver<String>, auth_string: String) 
     let stream = TcpStream::connect(SERVER_ADDRESS);
     let mut stream = match stream {
         Ok(s) => {
-            println!("Connecté au serveur");
+            info!("Connecté au serveur");
             Some(s)
         }
         Err(e) => {
-            eprintln!("Erreur de connexion au serveur: {}", e);
+            error!("Erreur de connexion au serveur: {}", e);
             None
         }
     };
@@ -85,7 +90,7 @@ fn listen_to_server(rx: std::sync::mpsc::Receiver<String>, auth_string: String) 
             match line {
                 Ok(server_message) => {
                     if !server_message.starts_with("PING_AND_DATA") {
-                        println!("Message reçu du serveur : {}", server_message);
+                        info!("Message reçu du serveur : {}", server_message);
 
                         if server_message.starts_with("SUBMITNAME") {
                             writeln!(tcp_stream, "{}", auth_string).unwrap();
@@ -97,7 +102,7 @@ fn listen_to_server(rx: std::sync::mpsc::Receiver<String>, auth_string: String) 
                     }
                 }
                 Err(e) => {
-                    println!("Erreur lors de la lecture du message : {}", e);
+                    error!("Erreur lors de la lecture du message : {}", e);
                     break;
                 }
             }
@@ -112,5 +117,5 @@ fn listen_to_server(rx: std::sync::mpsc::Receiver<String>, auth_string: String) 
         }
     }
 
-    println!("Connexion fermée par le serveur.");
+    warn!("Connexion fermée par le serveur.");
 }
