@@ -10,7 +10,8 @@ use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::Duration;
 
-const SERVER_ADDRESS: &str = "event.nationsglory.fr:59001";
+//const SERVER_ADDRESS: &str = "event.nationsglory.fr:59001";
+const SERVER_ADDRESS: &str = "31.58.228.160:59001";
 const REMOVE_WAITLIST: &str = "MESSAGE socket REMOVE_WAITINGLIST";
 
 #[derive(Debug, Deserialize)]
@@ -67,7 +68,11 @@ async fn connect(server: &str, tx: &State<Sender<String>>) -> String {
 
 fn listen_to_server(rx: std::sync::mpsc::Receiver<String>, auth_string: String) {
     loop {
-        let stream = TcpStream::connect(SERVER_ADDRESS);
+        println!("[{}] Tentative de connexion au serveur...", get_date());
+        let stream = TcpStream::connect_timeout(
+            &SERVER_ADDRESS.parse().expect("Adresse serveur invalide"),
+            Duration::from_secs(30),
+        );
         let stream = match stream {
             Ok(s) => {
                 println!("[{}] Connecté au serveur", get_date());
