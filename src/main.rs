@@ -1,13 +1,14 @@
 #[macro_use]
 extern crate rocket;
 
+use config::Config;
 use rocket::State;
+use serde::Deserialize;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::sync::mpsc::Sender;
 use std::thread;
-use config::Config;
-use serde::Deserialize;
+use std::time::Duration;
 
 const SERVER_ADDRESS: &str = "event.nationsglory.fr:59001";
 const REMOVE_WAITLIST: &str = "MESSAGE socket REMOVE_WAITINGLIST";
@@ -21,7 +22,6 @@ struct AppConfig {
 
 #[rocket::main]
 async fn main() -> Result<(), rocket::Error> {
-
     let (tx, rx) = std::sync::mpsc::channel::<String>();
 
     let settings = Config::builder()
@@ -44,7 +44,11 @@ async fn main() -> Result<(), rocket::Error> {
     rocket::build()
         .manage(tx)
         .mount("/", routes![connect])
-        .configure(rocket::Config::figment().merge(("port", &config.port)).merge(("address", &config.address)))
+        .configure(
+            rocket::Config::figment()
+                .merge(("port", &config.port))
+                .merge(("address", &config.address)),
+        )
         .launch()
         .await?;
 
@@ -62,55 +66,75 @@ async fn connect(server: &str, tx: &State<Sender<String>>) -> String {
 }
 
 fn listen_to_server(rx: std::sync::mpsc::Receiver<String>, auth_string: String) {
-    let stream = TcpStream::connect(SERVER_ADDRESS);
-    let stream = match stream {
-        Ok(s) => {
-            println!("[{}] Connecté au serveur", get_date());
-            Some(s)
-        }
-        Err(e) => {
-            error!("[{}] Erreur de connexion au serveur: {}", get_date(), e);
-            None
-        }
-    };
+    loop {
+        let stream = TcpStream::connect(SERVER_ADDRESS);
+        let stream = match stream {
+            Ok(s) => {
+                println!("[{}] Connecté au serveur", get_date());
+                Some(s)
+            }
+            Err(e) => {
+                error!("[{}] Erreur de connexion au serveur: {}", get_date(), e);
+                None
+            }
+        };
 
-    let mut is_auth = false;
+        let mut is_auth = false;
 
-    if let Some(mut tcp_stream) = stream {
-        let reader = BufReader::new(tcp_stream.try_clone().expect("Erreur de clonage du flux"));
+        if let Some(mut tcp_stream) = stream {
+            let reader = BufReader::new(tcp_stream.try_clone().expect("Erreur de clonage du flux"));
 
-        for line in reader.lines() {
-            match line {
-                Ok(server_message) => {
-                    if !server_message.starts_with("PING_AND_DATA") {
-                        println!("[{}] Message reçu du serveur : {}", get_date(), server_message);
+            for line in reader.lines() {
+                match line {
+                    Ok(server_message) => {
+                        if !server_message.starts_with("PING_AND_DATA") {
+                            println!(
+                                "[{}] Message reçu du serveur : {}",
+                                get_date(),
+                                server_message
+                            );
 
-                        if server_message.starts_with("SUBMITNAME") {
-                            writeln!(tcp_stream, "{}", auth_string).unwrap();
+                            if server_message.starts_with("SUBMITNAME") {
+                                if let Err(e) = writeln!(tcp_stream, "{}", auth_string) {
+                                    error!("[{}] Erreur d'envoi SUBMITNAME: {}", get_date(), e);
+                                    break;
+                                }
+                            }
+
+                            if server_message.starts_with("NAMEACCEPTED") {
+                                is_auth = true;
+                            }
                         }
+                    }
+                    Err(e) => {
+                        error!(
+                            "[{}] Erreur lors de la lecture du message : {}",
+                            get_date(),
+                            e
+                        );
+                        break;
+                    }
+                }
 
-                        if server_message.starts_with("NAMEACCEPTED") {
-                            is_auth = true;
+                if let Ok(server) = rx.try_recv() {
+                    if is_auth {
+                        let message = format!("MESSAGE socket ADD_WAITINGLIST {}", server);
+                        if writeln!(tcp_stream, "{}", message).is_err()
+                            || writeln!(tcp_stream, "{}", REMOVE_WAITLIST).is_err()
+                        {
+                            error!("[{}] Erreur d'envoi au serveur.", get_date());
+                            break;
                         }
                     }
                 }
-                Err(e) => {
-                    error!("[{}] Erreur lors de la lecture du message : {}", get_date(), e);
-                    break;
-                }
-            }
-
-            if let Ok(server) = rx.try_recv() {
-                if is_auth {
-                    let message = format!("MESSAGE socket ADD_WAITINGLIST {}", server);
-                    writeln!(tcp_stream, "{}", message).unwrap();
-                    writeln!(tcp_stream, "{}", REMOVE_WAITLIST).unwrap();
-                }
             }
         }
+        warn!(
+            "[{}] Connexion fermée ou perdue. Nouvelle tentative dans 3s...",
+            get_date()
+        );
+        thread::sleep(Duration::from_secs(3));
     }
-
-    warn!("[{}] Connexion fermée par le serveur.", get_date());
 }
 
 fn get_date() -> String {
